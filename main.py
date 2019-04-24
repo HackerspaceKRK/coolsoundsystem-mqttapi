@@ -25,19 +25,25 @@ from vortex import *
 import paho.mqtt.client as mqtt
 
 OUTPUTS = {
-	'softroom': 0, # 1, 2
-	'labelek': 2, # 3, 4
-	'hardroom': 4,
-	'magazynek': 6,
+        'softroom': 0, # 1, 2
+        'labelek': 2, # 3, 4
+        'hardroom': 4,
+        'magazynek': 6,
 }
 
 SOURCES = {
-	'chromecast': 0,
-	'raspi': 2,
-	'softroom': 4,
-	'hardroom': 6,
-	'magazynek': 8
+        'chromecast': 0,
+        'raspi': 2,
+        'softroom': 4,
+        'hardroom': 6,
+        'magazynek': 8
 }
+
+
+
+BASS_IOUTPUT = 11
+BASS_INPUT_ROOM = 'softroom'
+
 
 def main():
 
@@ -118,11 +124,17 @@ def main():
 		for c in range(2):
 			v.mute(ichannel+c, enabled)
 
+		if channel == BASS_INPUT_ROOM:
+			v.mute(BASS_IOUTPUT, enabled)
+
 	def set_output_gain(client, channel, ichannel, payload):
 		OUTPUT_GAIN[channel] = float(payload) - 20
 
 		for c in range(2):
 			v.output_gain(ichannel+c, OUTPUT_GAIN[channel])
+
+		if channel == BASS_INPUT_ROOM:
+			v.output_gain(BASS_IOUTPUT, OUTPUT_GAIN[channel])
 
 	def set_source(client, channel, ichannel, payload):
 		# disconnect from last and connect to where it should be
@@ -139,10 +151,15 @@ def main():
 		if last_source is not None:
 			for c in range(2):
 				v.matrix_mute(ichannel+c, SOURCES[last_source]+c, 1)
+				if channel == BASS_INPUT_ROOM:
+					v.matrix_mute(BASS_IOUTPUT, SOURCES[last_source]+c, 1)
 
 
 		for c in range(2):
 			v.matrix_mute(ichannel+c, newsource+c, 0)
+			if channel == BASS_INPUT_ROOM:
+				v.matrix_mute(BASS_IOUTPUT, newsource+c, 0)
+
 
 		OUTPUT_CACHE[channel] = payload
 	
