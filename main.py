@@ -69,8 +69,9 @@ def main():
 
 	print('Macro end')
 
-	OUTPUT_CACHE = {}	
+	OUTPUT_CACHE = {}
 	OUTPUT_GAIN = {}
+	MATRIX_GAIN = {}
 	OUTPUT_MUTE_ENABLED = {}
 
 	# The callback for when the client receives a CONNACK response from the server.
@@ -90,7 +91,7 @@ def main():
 		channel, action = msg.topic.split('/')[1:]
 		ACTION_TAB={
 			'mute': (mute_channel, get_channel_mute), 
-			'gain': (set_output_gain, get_output_gain),
+			'gain': (set_matrix_gain, get_matrix_gain),
 			'source': (set_source, get_source),
 		}
 
@@ -111,10 +112,13 @@ def main():
 		client.publish('mixer/{}/source/response'.format(channel), OUTPUT_CACHE.get(channel, '_none_'))
 
 	def get_output_gain(client, channel, ichannel, payload):
-		client.publish('mixer/{}/gain/response'.format(channel), OUTPUT_GAIN.get(channel, 0) + 20)
+		client.publish('mixer/{}/gain/response'.format(channel), OUTPUT_GAIN.get(channel, 0))
 	
 	def get_channel_mute(client, channel, ichannel, payload):
 		client.publish('mixer/{}/mute/response'.format(channel), '1' if OUTPUT_MUTE_ENABLED.get(channel, 1) else '0')
+
+	def get_matrix_gain(client, channel, ichannel, payload):
+		client.publish('mixer/{}/gain/response'.format(channel), MATRIX_GAIN.get(channel, 0))
 
 
 	def mute_channel(client, channel, ichannel, payload):
@@ -128,13 +132,19 @@ def main():
 			v.mute(BASS_IOUTPUT, enabled)
 
 	def set_output_gain(client, channel, ichannel, payload):
-		OUTPUT_GAIN[channel] = float(payload) - 20
+		OUTPUT_GAIN[channel] = float(payload)
 
 		for c in range(2):
 			v.output_gain(ichannel+c, OUTPUT_GAIN[channel])
 
 		if channel == BASS_INPUT_ROOM:
-			v.output_gain(BASS_IOUTPUT, OUTPUT_GAIN[channel])
+			v.output_gain(BASS_IOUTPUT, OUTPUT_GAIN[channel]+5)
+
+	def set_matrix_gain(client, channel, ichannel, payload):
+		MATRIX_GAIN[channel] = float(payload)
+		ochannel = SOURCES.get(OUTPUT_CACHE[channel], None)
+		for c in range(2):
+			v.matrix_gain(ichannel+c, ochannel+c, MATRIX_GAIN[channel])
 
 	def set_source(client, channel, ichannel, payload):
 		# disconnect from last and connect to where it should be

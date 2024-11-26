@@ -93,3 +93,7 @@ class EF2280Controller(object):
 	def output_gain(self, channel, gain):
 		command = 'GAINO{}{}'.format(format_channel_id(channel), int(gain))
 		return self._command_read_loop(command)
+
+	def matrix_gain(self, channel_from, channel_to, gain):
+		command = 'MGAIN{},{},{}'.format(format_channel_id(channel_from), format_channel_id(channel_to), int(gain))
+		return self._command_read_loop(command)
