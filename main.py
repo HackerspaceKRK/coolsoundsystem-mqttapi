@@ -64,7 +64,7 @@ def main():
 
 	# reset to known state (everything muted, matrix disconnected)
 	v.run_macro(0)
-	v.run_macro(1)
+	v.run_macro(3)
 	# v.run_macro(2) # LOADS HSKRK preset
 
 	print('Macro end')
@@ -73,6 +73,8 @@ def main():
 	OUTPUT_GAIN = {}
 	MATRIX_GAIN = {}
 	OUTPUT_MUTE_ENABLED = {}
+	ALERT_CHANNEL_CACHE = {}
+	ALERT_SOURCE = {}
 
 	# The callback for when the client receives a CONNACK response from the server.
 	def on_connect(client, userdata, flags, rc):
@@ -93,6 +95,9 @@ def main():
 			'mute': (mute_channel, get_channel_mute), 
 			'gain': (set_matrix_gain, get_matrix_gain),
 			'source': (set_source, get_source),
+			'alert': (setup_alert_channel, get_alert_channel),
+			'mixalert': (setup_mixalert_channel, get_alert_channel),
+			'stopalert': (stop_alert_channel, get_alert_channel),
 		}
 
 		# print('{} -> {}'.format(channel, action))
@@ -120,6 +125,8 @@ def main():
 	def get_matrix_gain(client, channel, ichannel, payload):
 		client.publish('mixer/{}/gain/response'.format(channel), MATRIX_GAIN.get(channel, 0))
 
+	def get_alert_channel(client, channel, ichannel, payload):
+		client.publish('mixer/{}/alert/response'.format(channel), ALERT_SOURCE.get(channel, 0))
 
 	def mute_channel(client, channel, ichannel, payload):
 		enabled = payload == '1'
@@ -172,7 +179,81 @@ def main():
 
 
 		OUTPUT_CACHE[channel] = payload
-	
+
+	def setup_alert_channel(client, channel, ichannel, payload):
+		ALERT_CHANNEL_CACHE = OUTPUT_CACHE.get(channel, None)
+		ALERT_SOURCE = SOURCES.get(payload, None)
+
+		if ALERT_SOURCE is None:
+			print('Bad alert source')
+
+			return
+
+		if OUTPUT_MUTE_ENABLED.get(channel, 1) != 0:
+			for c in range(2):
+				v.mute(ichannel+c, 0)
+
+		if SOURCES.get(ALERT_CHANNEL_CACHE, None) is not None:
+			for c in range(2):
+				v.matrix_mute(ichannel+c, SOURCES[ALERT_CHANNEL_CACHE]+c, 1)
+				if channel == BASS_INPUT_ROOM:
+					v.matrix_mute(BASS_IOUTPUT, SOURCES[ALERT_CHANNEL_CACHE]+c, 1)
+
+		for c in range(2):
+			v.matrix_mute(ichannel+c, ALERT_SOURCE+c, 0)
+			if channel == BASS_INPUT_ROOM:
+				v.matrix_mute(BASS_IOUTPUT, ALERT_SOURCE+c, 0)
+
+	def setup_mixalert_channel(client, channel, ichannel, payload):
+		ALERT_CHANNEL_CACHE = OUTPUT_CACHE.get(channel, None)
+		ALERT_SOURCE = SOURCES.get(payload, None)
+
+		if ALERT_SOURCE is None:
+			print('Bad alert source')
+
+			return
+
+		if OUTPUT_MUTE_ENABLED.get(channel, 1) != 0:
+			for c in range(2):
+				v.mute(ichannel+c, 0)
+
+		ochannel = SOURCES.get(ALERT_CHANNEL_CACHE, None)
+		if ochannel is not None:
+			for c in range(2):
+				v.matrix_gain(ichannel+c, ochannel+c, MATRIX_GAIN[channel]-10)
+
+		for c in range(2):
+			v.matrix_mute(ichannel+c, ALERT_SOURCE+c, 0)
+			if channel == BASS_INPUT_ROOM:
+				v.matrix_mute(BASS_IOUTPUT, ALERT_SOURCE+c, 0)
+
+	def stop_alert_channel(client, channel, ichannel, payload):
+		ALERT_CHANNEL_CACHE = OUTPUT_CACHE.get(channel, None)
+		ALERT_SOURCE = SOURCES.get(payload, None)
+
+		if ALERT_SOURCE is None:
+			print('Bad alert source')
+
+			return
+
+		if OUTPUT_MUTE_ENABLED.get(channel, 1) != 0:
+			for c in range(2):
+				v.mute(ichannel+c, 1)
+
+		for c in range(2):
+				v.matrix_mute(ichannel+c, ALERT_SOURCE+c, 1)
+				if channel == BASS_INPUT_ROOM:
+					v.matrix_mute(BASS_IOUTPUT, ALERT_SOURCE+c, 1)
+
+		ochannel = SOURCES.get(ALERT_CHANNEL_CACHE, None)
+		if ochannel is not None:
+			for c in range(2):
+				v.matrix_gain(ichannel+c, ochannel+c, MATRIX_GAIN[channel])
+
+			for c in range(2):
+				v.matrix_mute(ichannel+c, SOURCES[ALERT_CHANNEL_CACHE]+c, 0)
+				if channel == BASS_INPUT_ROOM:
+					v.matrix_mute(BASS_IOUTPUT, SOURCES[ALERT_CHANNEL_CACHE]+c, 0)
 
 	client = mqtt.Client()
 	client.on_connect = on_connect
@@ -182,8 +263,6 @@ def main():
 
 	client.loop_forever()
 
-
-	
 
 if __name__ == '__main__':
 	main()
